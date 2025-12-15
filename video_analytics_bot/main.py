@@ -4,7 +4,7 @@ import sys
 import os
 from pathlib import Path
 
-# ВАЖНО: загружаем .env ПЕРВЫМ делом!
+
 from dotenv import load_dotenv
 
 # Находим .env файл относительно этого файла
@@ -50,6 +50,26 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+def format_number(value):
+    """Форматирование числа - убираем разделители тысяч и округляем"""
+    if value is None:
+        return "0"
+    
+    try:
+        # Пробуем преобразовать в число
+        num = float(value)
+        
+        # Проверяем, является ли число целым
+        if num.is_integer():
+            # Возвращаем целое число без разделителей
+            return f"{int(num)}"
+        else:
+            # Для дробных чисел возвращаем с двумя знаками после запятой
+            return f"{num:.2f}"
+    except (ValueError, TypeError, AttributeError):
+        # Если не удалось преобразовать в число, возвращаем как есть
+        return str(value)
 
 def create_bot():
     """Создание объекта бота с проверкой токена"""
@@ -145,9 +165,6 @@ async def handle_text_query(message: types.Message):
     user_query = message.text.strip()
     user_id = message.from_user.id
     
-    # Отправляем сообщение о обработке
-    processing_msg = await message.answer("🔄 <i>Обрабатываю запрос...</i>")
-    
     try:
         # Создаем движок базы данных
         engine = create_async_engine(
@@ -166,16 +183,11 @@ async def handle_text_query(message: types.Message):
             result = await db_manager.execute_custom_query(sql_query, params)
             
             if result is not None:
-                # Проверяем, что результат - число
-                if isinstance(result, (int, float)):
-                    # Форматируем число с разделителями тысяч
-                    formatted_result = "{:,}".format(int(result)).replace(",", " ")
-                    await processing_msg.edit_text(f"📊 <b>Результат:</b> {formatted_result}")
-                else:
-                    # Если не число, показываем как есть
-                    await processing_msg.edit_text(f"📊 <b>Результат:</b> {result}")
+                # Форматируем результат (без разделителей тысяч)
+                formatted_result = format_number(result)
+                await message.answer(formatted_result)
             else:
-                await processing_msg.edit_text(
+                await message.answer(
                     "❌ <b>Не удалось получить результат.</b>\n"
                     "Проверьте формулировку запроса."
                 )
@@ -184,7 +196,7 @@ async def handle_text_query(message: types.Message):
         
     except Exception as e:
         logger.error(f"Error processing query from user {user_id}: {e}")
-        await processing_msg.edit_text(
+        await message.answer(
             "❌ <b>Произошла ошибка при обработке запроса.</b>\n"
             "Пожалуйста, проверьте формулировку или попробуйте другой запрос."
         )
